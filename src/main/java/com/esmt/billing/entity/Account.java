@@ -1,8 +1,11 @@
 package com.esmt.billing.entity;
 
+import com.esmt.billing.client.NotificationClient;
 import jakarta.persistence.*;
-import jakarta.transaction.Transaction;
+import com.esmt.billing.entity.Transaction;
 import lombok.*;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

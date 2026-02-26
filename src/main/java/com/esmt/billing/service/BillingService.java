@@ -1,5 +1,6 @@
 package com.esmt.billing.service;
 
+import com.esmt.billing.client.NotificationClient;
 import com.esmt.billing.dto.*;
 import com.esmt.billing.entity.*;
 import com.esmt.billing.repository.AccountRepository;
@@ -19,11 +20,8 @@ public class BillingService {
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final NotificationClient notificationClient;
 
-    /*
-     * Débite le compte de l'utilisateur après un trajet.
-     * Appelé par le Trip-Service via Feign.
-     */
     @Transactional
     public DebitResponse debit(DebitRequest request) {
         log.info("Tentative de débit: {} XOF pour userId={}", request.getAmount(), request.getUserId());
@@ -32,12 +30,9 @@ public class BillingService {
                 .orElseThrow(() -> new RuntimeException("Compte introuvable pour l'utilisateur"));
 
         BigDecimal balanceBefore = account.getBalance();
-
-        // vérifie le solde
         account.debit(request.getAmount());
         accountRepository.save(account);
 
-        // Enregistrement de la transaction pour l'historique
         Transaction txn = Transaction.builder()
                 .account(account)
                 .amount(request.getAmount())
@@ -51,6 +46,19 @@ public class BillingService {
 
         transactionRepository.save(txn);
 
+        // AJOUT NOTIF ALERTE SOLDE FAIBLE
+        try {
+            // Si le solde est < 1000 XOF, on alerte
+            if (account.getBalance().compareTo(new BigDecimal("1000")) < 0) {
+                notificationClient.sendLowBalanceAlert(
+                        "PASS-" + request.getUserId(),
+                        account.getBalance().doubleValue()
+                );
+            }
+        } catch (Exception e) {
+            log.warn("Notification d'alerte non envoyée (Service indisponible)");
+        }
+
         return DebitResponse.builder()
                 .txnRef(txn.getTxnRef())
                 .status("SUCCESS")
@@ -59,18 +67,12 @@ public class BillingService {
                 .build();
     }
 
-    /**
-     * SIMULATION de rechargement PayDunya
-     */
     @Transactional
     public String simulatePayDunyaRecharge(CreditRequest request) {
         log.info("Simulation rechargement PayDunya: {} XOF pour userId={}", request.getAmount(), request.getUserId());
 
         Account account = accountRepository.findByUserId(request.getUserId())
-                .orElseGet(() -> {
-                    log.info("Premier rechargement : création du compte pour l'userId={}", request.getUserId());
-                    return Account.builder().userId(request.getUserId()).build();
-                });
+                .orElseGet(() -> Account.builder().userId(request.getUserId()).build());
 
         BigDecimal balanceBefore = account.getBalance();
         account.credit(request.getAmount());
@@ -86,6 +88,17 @@ public class BillingService {
                 .build();
 
         transactionRepository.save(txn);
+
+        // AJOUT NOTIF CONFIRMATION RECHARGE
+        try {
+            notificationClient.sendRechargeConfirmation(
+                    "PASS-" + request.getUserId(),
+                    request.getAmount().doubleValue(),
+                    account.getBalance().doubleValue()
+            );
+        } catch (Exception e) {
+            log.warn("Confirmation de recharge non envoyée (Service indisponible)");
+        }
 
         return "Rechargement réussi. Nouveau solde: " + account.getBalance() + " XOF";
     }
