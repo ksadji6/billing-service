@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -35,5 +36,9 @@ public class BillingController {
     @Operation(summary = "Consulter l'historique des transactions d'un utilisateur")
     public ResponseEntity<List<Transaction>> getHistory(@PathVariable Long userId) {
         return ResponseEntity.ok(billingService.getTransactionHistory(userId));
+    }
+    @GetMapping("/balance/{userId}")
+    public ResponseEntity<BigDecimal> getBalance(@PathVariable Long userId) {
+        return ResponseEntity.ok(billingService.getBalance(userId));
     }
 }

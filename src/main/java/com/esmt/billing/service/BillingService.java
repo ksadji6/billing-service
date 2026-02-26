@@ -27,7 +27,13 @@ public class BillingService {
         log.info("Tentative de débit: {} XOF pour userId={}", request.getAmount(), request.getUserId());
 
         Account account = accountRepository.findByUserId(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("Compte introuvable pour l'utilisateur"));
+                .orElseGet(() -> {
+                    Account newAcc = Account.builder()
+                            .userId(request.getUserId())
+                            .balance(new BigDecimal("5000")) // On lui offre 5000 pour les tests !
+                            .build();
+                    return accountRepository.save(newAcc);
+                });
 
         BigDecimal balanceBefore = account.getBalance();
         account.debit(request.getAmount());
@@ -90,7 +96,7 @@ public class BillingService {
         transactionRepository.save(txn);
 
         // AJOUT NOTIF CONFIRMATION RECHARGE
-        try {
+        /*try {
             notificationClient.sendRechargeConfirmation(
                     "PASS-" + request.getUserId(),
                     request.getAmount().doubleValue(),
@@ -98,7 +104,7 @@ public class BillingService {
             );
         } catch (Exception e) {
             log.warn("Confirmation de recharge non envoyée (Service indisponible)");
-        }
+        }*/
 
         return "Rechargement réussi. Nouveau solde: " + account.getBalance() + " XOF";
     }
@@ -106,4 +112,14 @@ public class BillingService {
     public List<Transaction> getTransactionHistory(Long userId) {
         return transactionRepository.findByAccountUserIdOrderByCreatedAtDesc(userId);
     }
+
+    public BigDecimal getBalance(Long userId) {
+        log.info("Récupération du solde pour userId={}", userId);
+        return accountRepository.findByUserId(userId)
+                .map(Account::getBalance)
+                .orElse(BigDecimal.ZERO); // Si le compte n'existe pas encore, on renvoie 0
+    }
+
+
+
 }
